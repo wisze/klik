@@ -160,7 +160,7 @@ void setup() {
   Serial.print(ssid);
   Serial.print(" as ");
   Serial.println(hostname);
-  WiFi.hostname("hostname");
+  WiFi.hostname(hostname);
   WiFi.begin(ssid, password);
 
   while (WiFi.status() != WL_CONNECTED) {
