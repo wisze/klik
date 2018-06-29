@@ -1,6 +1,6 @@
 /**
  * Time and date stuff
- */
+ **/
 struct DateTime {
   int sec;
   int dsec; // seconds since midnight
@@ -19,9 +19,13 @@ struct DateTime {
  */
 struct SwitchCommand {
   int no;
-  int when;  // When to switch in seconds since midnight
+  int whenOn;   // When to switch in seconds since midnight
+  int whenOff;  // When to switch in seconds since midnight
   boolean on;
-  boolean done;
 };
 
+struct Switch {
+  int no;
+  String name;
+};
 

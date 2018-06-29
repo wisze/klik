@@ -54,6 +54,7 @@
 
 const char* ssid = "";
 const char* password = "";
+const char* hostname = "klik";
 
 /*****************************************************************
  * Sensor and LED pins
@@ -98,7 +99,7 @@ WiFiUDP udp;
 /*****************************************************************
  * Automatic switches, switch on when it is dark
  */
-const float dark = 250.0;      // it's dark below 250 lumen
+const float dark = 0.05;       // it's dark below this voltage
 const char group = 'J';        // switch group
 const int nswitch = 8;         // number of switches
 const int switchinterval = 3;  // switch every three minutes
@@ -126,6 +127,10 @@ void setup() {
   light[1] = {2, "Schemerlamp"};
   light[2] = {3, "Leeslamp"};
    
+  /**
+   * Scheduling
+   * number, time to switch on, time to switch off
+   **/
   sc[0] = {1, timetosec("16:15:00"), timetosec("20:00:00"), false};
   sc[1] = {2, timetosec("16:00:00"), timetosec("21:00:00"), false};
   sc[2] = {2, timetosec("02:30:00"), timetosec("03:30:00"), false};
@@ -154,8 +159,8 @@ void setup() {
   Serial.print("Connecting to ");
   Serial.print(ssid);
   Serial.print(" as ");
-  // Serial.println(hostname);
-  WiFi.hostname("klik");
+  Serial.println(hostname);
+  WiFi.hostname("hostname");
   WiFi.begin(ssid, password);
 
   while (WiFi.status() != WL_CONNECTED) {
@@ -233,7 +238,6 @@ void setup() {
       // Send out the switch command three times because what i tell you three times is true
       for (int iklik = 0; iklik < 3; iklik++) {
         kaKuSwitch.sendSignal(group, sw.toInt(), cl);
-        // sc[sw.toInt()].done = false;
         delay(25);
       }
     }
@@ -273,7 +277,7 @@ void setup() {
     message += "  {\"humidity\": " + (String)humidity + " },\n";
     message += "  {\"pressure\": " + (String)(pressure/100.0) + " },\n";
     message += "  {\"light\": " + (String)lux + " },\n";
-    message += "}";
+    message += "} }";
     server.send(200, "application/json", message);
   });
 
@@ -616,7 +620,7 @@ boolean itsLight() {
   float vin = 3.3; //input voltage
   int adc = analogRead(lightPin);
   vout = adc*(vin/1024.0);
-  if (vout > 3.0) {return true;}
+  if (vout > dark) {return true;}
   return false;
 }
 
