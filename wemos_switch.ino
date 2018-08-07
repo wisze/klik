@@ -15,6 +15,7 @@
  * 201804 Corrected some errors in light measurement
  * 201805 Rewrote scheduling, many changes from testing,
  *        different handling of dark/light
+ * 201808 Added units to json response, changed Pa to hPa for pressure
  *
  * Todo:
  * - sensorthings protocol
@@ -54,7 +55,7 @@
 
 const char* ssid = "";
 const char* password = "";
-const char* hostname = "klik";
+const char* sitename = "klik";
 
 /*****************************************************************
  * Sensor and LED pins
@@ -159,8 +160,8 @@ void setup() {
   Serial.print("Connecting to ");
   Serial.print(ssid);
   Serial.print(" as ");
-  Serial.println(hostname);
-  WiFi.hostname(hostname);
+  Serial.println(sitename);
+  WiFi.hostname(sitename);
   WiFi.begin(ssid, password);
 
   while (WiFi.status() != WL_CONNECTED) {
@@ -251,17 +252,17 @@ void setup() {
    */
   server.on("/temperature", []() {
     getTemperature();
-    String message = "{\"temperature\": " + (String)temperature + " }";
+    String message = "{\"temperature\": " + (String)temperature + ", \"unit_of_measurement\": \"°C\" }";
     server.send(200, "application/json", message);
   });
   server.on("/humidity", []() {
     getTemperature();
-    String message = "{\"humidity\": " + (String)humidity + " }";
+    String message = "{\"humidity\": " + (String)humidity + ", \"unit_of_measurement\": \"\%\" }";
     server.send(200, "application/json", message);
   });
   server.on("/pressure", []() {
     getPressure();
-    String message = "{\"pressure\": " + (String)(pressure/100.0) + " }";
+    String message = "{\"pressure\": " + (String)(pressure) + ", \"unit_of_measurement\": \"hPa\" }";
     server.send(200, "application/json", message);
   });
   server.on("/light", []() {
@@ -273,9 +274,9 @@ void setup() {
     String message = "{\"sensors\": { \n";
     message += "  {\"date\": \"" + printDate(epoch) + "\" },\n";
     message += "  {\"time\": \"" + printTime(epoch) + "\" },\n";
-    message += "  {\"temperature\": " + (String)temperature + " },\n";
-    message += "  {\"humidity\": " + (String)humidity + " },\n";
-    message += "  {\"pressure\": " + (String)(pressure/100.0) + " },\n";
+    message += "  {\"temperature\": " + (String)temperature + ", \"unit_of_measurement\": \"°C\" },\n";
+    message += "  {\"humidity\": " + (String)humidity + ", \"unit_of_measurement\": \"\%\" },\n";
+    message += "  {\"pressure\": " + (String)(pressure) + ", \"unit_of_measurement\": \"hPa\" },\n";
     message += "  {\"light\": " + (String)lux + " },\n";
     message += "} }";
     server.send(200, "application/json", message);

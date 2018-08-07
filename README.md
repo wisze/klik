@@ -9,8 +9,8 @@ The wemos version has a website (http://klik/ on a local network) with a number 
 Timed on and off switch commands are hardcoded. At given times the switch on and off commands are sent automatically. The timed light on commands are sent only when the light resistor indicates it is dark in the room. Lights are switched off automatically whe the light resistor resistance is low (the room is light).
 
 Sensor measurement values can be requested on a number of urls, a request returns json.
-- http://klik/temperature
-- http://klik/humidity
-- http://klik/pressure    returns pressure in Pascal
+- http://klik/temperature returns temperature in Celsius
+- http://klik/humidity    returns humidity in %
+- http://klik/pressure    returns pressure in hectoPascal
 - http://klik/light       returns a rough apprroximation of lux values, returns inf when in daylight
 - http://klik/sensors     all of the sensors measurements
