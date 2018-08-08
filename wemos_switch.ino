@@ -267,7 +267,7 @@ void setup() {
   });
   server.on("/light", []() {
     getLight();
-    String message = "{\"light\": " + (String)lux + " }";
+    String message = "{\"light\": " + (String)lux + ", \"unit_of_measurement\": \"Volt\" }";
     server.send(200, "application/json", message);
   });
   server.on("/sensors", []() {
@@ -277,7 +277,7 @@ void setup() {
     message += "  {\"temperature\": " + (String)temperature + ", \"unit_of_measurement\": \"°C\" },\n";
     message += "  {\"humidity\": " + (String)humidity + ", \"unit_of_measurement\": \"\%\" },\n";
     message += "  {\"pressure\": " + (String)(pressure) + ", \"unit_of_measurement\": \"hPa\" },\n";
-    message += "  {\"light\": " + (String)lux + " },\n";
+    message += "  {\"light\": " + (String)lux + ", \"unit_of_measurement\": \"Volt\" },\n";
     message += "} }";
     server.send(200, "application/json", message);
   });
@@ -544,24 +544,27 @@ int timetosec(String d) {
 }
 String printTime(unsigned long e) {
   DateTime t = epoch2datetime(e);
-  String out = (String)t.hour + ":" + (String)t.min + ":" + (String)t.sec;
-  // char* out = "";
-  // sprintf(out,"%02d:%02d:%02d",t.hour,t.min,t.sec);
+  // String out = (String)t.hour + ":" + (String)t.min + ":" + (String)t.sec;
+  char buff[8];
+  sprintf(buff,"%02d:%02d:%02d",t.hour,t.min,t.sec);
+  String out = String(buff);
   return out;
 }                                                  //
 String printDate(unsigned long e) {
   DateTime t = epoch2datetime(e);
-  String out = (String)t.day + "-" + (String)t.month + "-" + (String)t.year;
-  // char* out = "";
-  // sprintf(out,"%02d-%02d-%04d",t.day,t.month,t.year);
+  // String out = (String)t.day + "-" + (String)t.month + "-" + (String)t.year;
+  char buff[10];
+  sprintf(buff,"%02d-%02d-%04d",t.day,t.month,t.year);
+  String out = String(buff);
   return out;
 }                                                //
 String printDateTime(unsigned long e) {
   DateTime t = epoch2datetime(e);
-  String out = (String)t.day + "-" + (String)t.month + "-" + (String)t.year + " ";
-  out += (String)t.hour + ":" + (String)t.min + ":" + (String)t.sec + " UTC";
-  // char* out = "";
-  // sprintf(out,"%02d-%02d-%04d %02d:%02d:%02d UTC",t.day,t.month,t.year,t.hour,t.min,t.sec);
+  // String out = (String)t.day + "-" + (String)t.month + "-" + (String)t.year + " ";
+  // out += (String)t.hour + ":" + (String)t.min + ":" + (String)t.sec + " UTC";
+  char buff[24];
+  sprintf(buff,"%02d-%02d-%04d %02d:%02d:%02d UTC",t.day,t.month,t.year,t.hour,t.min,t.sec);
+  String out = String(buff);
   return out;
 }
 
