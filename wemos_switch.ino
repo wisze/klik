@@ -271,14 +271,15 @@ void setup() {
     server.send(200, "application/json", message);
   });
   server.on("/sensors", []() {
-    String message = "{\"sensors\": { \n";
-    message += "  {\"date\": \"" + printDate(epoch) + "\" },\n";
-    message += "  {\"time\": \"" + printTime(epoch) + "\" },\n";
-    message += "  {\"temperature\": " + (String)temperature + ", \"unit_of_measurement\": \"°C\" },\n";
-    message += "  {\"humidity\": " + (String)humidity + ", \"unit_of_measurement\": \"\%\" },\n";
-    message += "  {\"pressure\": " + (String)(pressure) + ", \"unit_of_measurement\": \"hPa\" },\n";
-    message += "  {\"light\": " + (String)lux + ", \"unit_of_measurement\": \"Volt\" },\n";
-    message += "} }";
+    String message = "{ \"sample\": {\n";
+    message += "  \"date\": \"" + printDate(epoch) + "\" ,\n";
+    message += "  \"time\": \"" + printTime(epoch) + "\" ,\n";
+    message += "  \"temperature\": { \"value\": " + (String)temperature + ", \"unit_of_measurement\": \"°C\" },\n";
+    message += "  \"humidity\": { \"value\": " + (String)humidity + ", \"unit_of_measurement\": \"\%\" },\n";
+    message += "  \"pressure\": { \"value\": " + (String)(pressure) + ", \"unit_of_measurement\": \"hPa\" },\n";
+    message += "  \"light\": { \"value\": " + (String)lux + ", \"unit_of_measurement\": \"Volt\" }\n";
+    message += "  }\n";
+    message += "}\n";
     server.send(200, "application/json", message);
   });
 
@@ -297,18 +298,6 @@ void setup() {
   getTemperature();
   getLight();
   epoch  = getTime();
-
-  /***************************
-   * Set the switch time table
-   * sc[i] = {number, when, on, done}
-   * sc[i] = {number, when on, when off, on (or not)/}
-  sc[0] = {1, timetosec("16:05:00"), true,  false};
-  sc[1] = {1, timetosec("20:00:00"), false, false};
-  sc[2] = {2, timetosec("16:00:00"), true,  false};
-  sc[3] = {2, timetosec("20:15:00"), false, false};
-  sc[4] = {3, timetosec("16:15:00"), true,  false};
-  sc[5] = {3, timetosec("20:20:00"), false, false};
-   **/
 
   // LEDs off
   led(0, "off");
