@@ -14,3 +14,8 @@ Sensor measurement values can be requested on a number of urls, a request return
 - http://klik/pressure    returns pressure in hectoPascal
 - http://klik/light       returns a rough apprroximation of lux values, returns inf when in daylight
 - http://klik/sensors     all of the sensors measurements
+
+Partly support for the OGC SensorThings standard will be added in due time. For now:
+- http://klik/sensorthings/v1.0                 Capabilities
+- http://klik/sensorthings/v1.0/Things          What it is
+- http://klik/sensorthings/v1.0/Observations    Limited time series of measurements    
