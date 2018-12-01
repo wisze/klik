@@ -16,6 +16,7 @@
  * 201805 Rewrote scheduling, many changes from testing,
  *        different handling of dark/light
  * 201808 Added units to json response, changed Pa to hPa for pressure
+ * 201812 Started on Sensorthings
  *
  * Todo:
  * - sensorthings protocol
@@ -51,7 +52,8 @@
 #include <Wire.h>
 #include <Adafruit_BMP085.h>
 #include <WiFiUdp.h>
-#include "switch_structs.h"  // Structures
+#include "klik_structs.h"  // Structures
+#include "sensors.h";
 
 const char* ssid = "";
 const char* password = "";
@@ -74,6 +76,7 @@ const int sampleinterval = 5; // sample every 5 minutes
 int ncount = 10000000; // Number of cycles between sensor checks
 int icount = 0;        // Loop counter for main loop(), get sensor values every ncount cycles
 float temperature, humidity, pressure, lux, vout;
+int isample;
 String webString = "";
 
 // WiFiServer server(80);
@@ -132,11 +135,16 @@ void setup() {
    * Scheduling
    * number, time to switch on, time to switch off
    **/
-  sc[0] = {1, timetosec("16:15:00"), timetosec("20:00:00"), false};
-  sc[1] = {2, timetosec("16:00:00"), timetosec("21:00:00"), false};
-  sc[2] = {2, timetosec("02:30:00"), timetosec("03:30:00"), false};
-  sc[3] = {3, timetosec("16:05:00"), timetosec("20:15:00"), false};
-  
+  sc[0] = {1, timetosec("14:15:00"), timetosec("21:00:00"), false};
+  sc[1] = {2, timetosec("14:00:00"), timetosec("21:30:00"), false};
+  sc[2] = {2, timetosec("02:30:00"), timetosec("04:30:00"), false};
+  sc[3] = {3, timetosec("14:05:00"), timetosec("21:15:00"), false};
+
+  /**
+   * Sensorthings stuff 
+   **/
+  things[0] = {"Klik", "Klik meet in huis."};
+   
   Serial.begin(115200);
   delay(10);
 
@@ -283,6 +291,47 @@ void setup() {
     server.send(200, "application/json", message);
   });
 
+  /** 
+   * Sensorthings stuff
+   */
+  server.on("/sensorthings/v1.0" , []() {
+    String message = "{ \"value\": [";
+    message += "  {\"name\": \"Things\", \"url\": \""+server.uri()+"/sensorthings/v1.0/Things\" },";
+    message += "  {\"name\": \"Datastreams\", \"url\": \""+server.uri()+"/sensorthings/v1.0/Datastreams\" },";
+    // message += "  {\"name\": \"Sensors\", \"url\": "+server.uri()+"/sensorthings/v1.0/Sensors\" },";
+    message += "  {\"name\": \"Observations\", \"url\": \""+server.uri()+"/sensorthings/v1.0/Observations\" },";
+    // message += "  {\"name\": \"ObservedProperties\", \"url\": \""+server.uri()+"/sensorthings/v1.0/ObservedProperties\" },";
+    message += "  {\"name\": \"FeaturesOfInterest\", \"url\": \""+server.uri()+"/sensorthings/v1.0/FeaturesOfInterest\" }";
+    message += "] }";
+    server.send(200, "application/json", message );
+  });
+  server.on("/sensorthings/v1.0/Things", []() {
+    String ID = server.arg("ID");
+    /** if (ID == "on") doeiets; **/
+    String message = "{ \"value\": [";
+    for (int i=0;i<nthings;i++) {
+       if (i>0) {message += ", ";}
+       message += "{ \"name\": \""+things[i].name+"\", \"description\": \""+things[i].description+"\" }";
+    }
+    message += "] }";
+    server.send(200, "application/json", message );
+  });
+  /**
+   * Send out *all* observations in memory
+   */
+  server.on("/sensorthings/v1.0/Observations", []() {
+    String message = "{ \"value\": [";
+    for (int i=0;i<nsamples;i++) {
+       int is = i + isample;
+       if (i>0) {message += ", ";}
+       message += "{ \"@iot.id\": \"t"+(String)(is)+"\", \"result\": \""+(String)temperatureTS[is]+"\", \"phenomenonTime\": \""+timeTS[is]+"\", \"unitOfMeasurement\": \"°C\", \"FeatureOfInterest@iot.navigationLink\": \""+server.uri()+"(t"+(String)(is)+")\"}, ";
+       message += "{ \"@iot.id\": \"h"+(String)(is)+"\", \"result\": \""+(String)humidityTS[is]   +"\", \"phenomenonTime\": \""+timeTS[is]+"\", \"unitOfMeasurement\": \"\%\", \"FeatureOfInterest@iot.navigationLink\": \""+server.uri()+"(h"+(String)(is)+")\"}, ";
+       message += "{ \"@iot.id\": \"p"+(String)(is)+"\", \"result\": \""+(String)pressureTS[is]   +"\", \"phenomenonTime\": \""+timeTS[is]+"\", \"unitOfMeasurement\": \"hPa\", \"FeatureOfInterest@iot.navigationLink\": \""+server.uri()+"(p"+(String)(is)+")\"}";
+    }
+    message += "] }";
+    server.send(200, "application/json", message );
+  });
+
   // Start the server
   server.begin();
   Serial.println("Server started");
@@ -299,6 +348,7 @@ void setup() {
   getLight();
   epoch  = getTime();
 
+  isample = 0;
   // LEDs off
   led(0, "off");
   led(1, "off");
@@ -348,6 +398,13 @@ void loop(void) {
     getLight();
     epoch  = getTime();
     Serial.println(printDateTime(epoch));
+    // store the current values into the array
+    temperatureTS[isample] = temperature;
+    humidityTS[isample] = humidity;
+    pressureTS[isample] = pressure;
+    timeTS[isample] = printDateTime(epoch);
+    isample++;
+    if (isample==nsamples) {isample=0;};
     // LED flashing also gives a 1 second delay, don't remove this line
     led(1, "flash");
   }
@@ -552,7 +609,7 @@ String printDateTime(unsigned long e) {
   // String out = (String)t.day + "-" + (String)t.month + "-" + (String)t.year + " ";
   // out += (String)t.hour + ":" + (String)t.min + ":" + (String)t.sec + " UTC";
   char buff[24];
-  sprintf(buff,"%02d-%02d-%04d %02d:%02d:%02d UTC",t.day,t.month,t.year,t.hour,t.min,t.sec);
+  sprintf(buff,"%04d-%02d-%02dT%02d:%02d:%02dZ",t.year,t.month,t.day,t.hour,t.min,t.sec);
   String out = String(buff);
   return out;
 }
