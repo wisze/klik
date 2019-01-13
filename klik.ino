@@ -72,7 +72,7 @@ const int temperaturePin = 12; // DHT temperature and humidity sensor
 const int lightPin = 0;        // Analog pin for the light resistor
 
 const int waitfor = 1000;
-const int sampleinterval = 5; // sample every 5 minutes
+const int sampleinterval = 15; // sample every 15 minutes
 int ncount = 10000000; // Number of cycles between sensor checks
 int icount = 0;        // Loop counter for main loop(), get sensor values every ncount cycles
 float temperature, humidity, pressure, lux, vout;
@@ -103,7 +103,7 @@ WiFiUDP udp;
 /*****************************************************************
  * Automatic switches, switch on when it is dark
  */
-const float dark = 0.05;       // it's dark below this voltage
+const float dark = 3.00;       // it's dark below this voltage
 const char group = 'J';        // switch group
 const int nswitch = 8;         // number of switches
 const int switchinterval = 3;  // switch every three minutes
@@ -127,18 +127,19 @@ void setup() {
   /***********************
    * Lights and scheduling
    **/
-  light[0] = {1, "Keuken"};
-  light[1] = {2, "Schemerlamp"};
-  light[2] = {3, "Leeslamp"};
+  light[0] = {1, "Schemerlamp"};
+  light[1] = {2, "Keuken"};
+  light[2] = {3, "Balkon"};
    
   /**
    * Scheduling
    * number, time to switch on, time to switch off
    **/
-  sc[0] = {1, timetosec("14:15:00"), timetosec("21:00:00"), false};
-  sc[1] = {2, timetosec("14:00:00"), timetosec("21:30:00"), false};
-  sc[2] = {2, timetosec("02:30:00"), timetosec("04:30:00"), false};
-  sc[3] = {3, timetosec("14:05:00"), timetosec("21:15:00"), false};
+  sc[0] = {1, timetosec("17:00:00"), timetosec("21:30:00"), false};
+  sc[1] = {2, timetosec("14:00:00"), timetosec("22:00:00"), false};
+  sc[2] = {2, timetosec("04:30:00"), timetosec("05:15:00"), false};
+  sc[3] = {3, timetosec("14:05:00"), timetosec("22:15:00"), false};
+  sc[4] = {3, timetosec("04:30:00"), timetosec("06:00:00"), false};
 
   /**
    * Sensorthings stuff 
@@ -215,6 +216,20 @@ void setup() {
     led(0,"flash");
   });
 
+  server.on("/graph", []() {
+    String message = "<html><head>";
+    message += styleHeader();
+    message += "</head><body>\n";
+    message += "<h2>Graph</h2>\n";
+    message += "<p>Metingen over een periode van "+(String) (nsamples*sampleinterval)+" minuten.\n";
+    message += "Met een meting iedere "+(String) sampleinterval+" minuten.</p>\n";
+    message += "<p><center>\n";
+    message += graph(nsamples);
+    message += "</center></p></body></html>";
+    server.send(200, "text/html", message);
+    Serial.println("Request for /graph handled");
+    led(0,"flash");
+  });
   /************************
    * KlikaanKlikuit command
    */
@@ -278,15 +293,16 @@ void setup() {
     String message = "{\"light\": " + (String)lux + ", \"unit_of_measurement\": \"Volt\" }";
     server.send(200, "application/json", message);
   });
+  
   server.on("/sensors", []() {
-    String message = "{ \"sample\": {\n";
-    message += "  \"date\": \"" + printDate(epoch) + "\" ,\n";
-    message += "  \"time\": \"" + printTime(epoch) + "\" ,\n";
-    message += "  \"temperature\": { \"value\": " + (String)temperature + ", \"unit_of_measurement\": \"°C\" },\n";
-    message += "  \"humidity\": { \"value\": " + (String)humidity + ", \"unit_of_measurement\": \"\%\" },\n";
-    message += "  \"pressure\": { \"value\": " + (String)(pressure) + ", \"unit_of_measurement\": \"hPa\" },\n";
-    message += "  \"light\": { \"value\": " + (String)lux + ", \"unit_of_measurement\": \"Volt\" }\n";
-    message += "  }\n";
+    String message = "{ \"sample\": [\n";
+    message += "  {\"date\": \"" + printDate(epoch) + "\"},\n";
+    message += "  {\"time\": \"" + printTime(epoch) + "\"},\n";
+    message += "  {\"temperature\": { \"value\": " + (String)temperature + ", \"unit_of_measurement\": \"°C\" }},\n";
+    message += "  {\"humidity\": { \"value\": " + (String)humidity + ", \"unit_of_measurement\": \"%\" }},\n";
+    message += "  {\"pressure\": { \"value\": " + (String)(pressure) + ", \"unit_of_measurement\": \"hPa\" }},\n";
+    message += "  {\"voltage over light resistor\": { \"value\": " + (String)vout + ", \"unit_of_measurement\": \"Volt\" }}\n";
+    message += "  ]\n";
     message += "}\n";
     server.send(200, "application/json", message);
   });
@@ -305,6 +321,7 @@ void setup() {
     message += "] }";
     server.send(200, "application/json", message );
   });
+  
   server.on("/sensorthings/v1.0/Things", []() {
     String ID = server.arg("ID");
     /** if (ID == "on") doeiets; **/
@@ -316,17 +333,22 @@ void setup() {
     message += "] }";
     server.send(200, "application/json", message );
   });
+  
   /**
    * Send out *all* observations in memory
    */
   server.on("/sensorthings/v1.0/Observations", []() {
-    String message = "{ \"value\": [";
+    String message = "{ \"value\": [\n";
     for (int i=0;i<nsamples;i++) {
-       int is = i + isample;
+       int is = (i + isample) % nsamples;
        if (i>0) {message += ", ";}
-       message += "{ \"@iot.id\": \"t"+(String)(is)+"\", \"result\": \""+(String)temperatureTS[is]+"\", \"phenomenonTime\": \""+timeTS[is]+"\", \"unitOfMeasurement\": \"°C\", \"FeatureOfInterest@iot.navigationLink\": \""+server.uri()+"(t"+(String)(is)+")\"}, ";
-       message += "{ \"@iot.id\": \"h"+(String)(is)+"\", \"result\": \""+(String)humidityTS[is]   +"\", \"phenomenonTime\": \""+timeTS[is]+"\", \"unitOfMeasurement\": \"\%\", \"FeatureOfInterest@iot.navigationLink\": \""+server.uri()+"(h"+(String)(is)+")\"}, ";
-       message += "{ \"@iot.id\": \"p"+(String)(is)+"\", \"result\": \""+(String)pressureTS[is]   +"\", \"phenomenonTime\": \""+timeTS[is]+"\", \"unitOfMeasurement\": \"hPa\", \"FeatureOfInterest@iot.navigationLink\": \""+server.uri()+"(p"+(String)(is)+")\"}";
+       // message += "{ \"@iot.id\": \"t"+(String)(is)+"\", \"result\": \""+(String)temperatureTS[is]+"\", \"phenomenonTime\": \""+timeTS[is]+"\", \"unitOfMeasurement\": \"°C\", \"FeatureOfInterest@iot.navigationLink\": \""+server.uri()+"(t"+(String)(is)+")\"}, ";
+       // message += "{ \"@iot.id\": \"h"+(String)(is)+"\", \"result\": \""+(String)humidityTS[is]   +"\", \"phenomenonTime\": \""+timeTS[is]+"\", \"unitOfMeasurement\": \"\%\", \"FeatureOfInterest@iot.navigationLink\": \""+server.uri()+"(h"+(String)(is)+")\"}, ";
+       // message += "{ \"@iot.id\": \"p"+(String)(is)+"\", \"result\": \""+(String)pressureTS[is]   +"\", \"phenomenonTime\": \""+timeTS[is]+"\", \"unitOfMeasurement\": \"hPa\", \"FeatureOfInterest@iot.navigationLink\": \""+server.uri()+"(p"+(String)(is)+")\"}";
+
+       message += "{ \"@iot.id\": \"t"+(String)(is)+"\", \"result\": \""+(String)temperatureTS[is]+"\", \"phenomenonTime\": \""+timeTS[is]+"\", \"unitOfMeasurement\": \"°C\"}, \n";
+       message += "{ \"@iot.id\": \"h"+(String)(is)+"\", \"result\": \""+(String)humidityTS[is]   +"\", \"phenomenonTime\": \""+timeTS[is]+"\", \"unitOfMeasurement\": \"%\"}, \n";
+       message += "{ \"@iot.id\": \"p"+(String)(is)+"\", \"result\": \""+(String)pressureTS[is]   +"\", \"phenomenonTime\": \""+timeTS[is]+"\", \"unitOfMeasurement\": \"hPa\"}";
     }
     message += "] }";
     server.send(200, "application/json", message );
@@ -720,13 +742,60 @@ String button(String t, String c, String n, String v) {
   return out;
 }
 
+/**
+ * Returns a graph of the measurements in SVG
+ * First get minimum and maximum of all time series
+ */
+String graph(int ns) {
+  int width=600;
+  int height=400;
+  float hMin=1000.0; float hMax=-1000.0;
+  float pMin=1000.0; float pMax=-1000.0;
+  float tMin=1000.0; float tMax=-1000.0;
+  for (int i=0;i<nsamples;i++) {
+      tMin = min(temperatureTS[i],tMin);
+      tMax = max(temperatureTS[i],tMax);
+      hMin = min(humidityTS[i],hMin);
+      hMax = max(humidityTS[i],hMax);
+      pMin = min(pressureTS[i],pMin);
+      pMax = max(pressureTS[i],pMax);
+  }
+  String out = "<svg height=\""+(String) height+"\" width=\""+(String) width+"\">\n";
+  out += "<polyline style=\"fill:none;stroke:green;stroke-width:3\" points=\"";
+  for (int i=0;i<nsamples;i++) {
+    int is = (i+isample) % nsamples;
+    float x=width*i/nsamples;
+    float y=height*(pressureTS[is]-pMin)/(pMax-pMin);
+    out += (String) x+","+(String) y+" ";
+  }
+  out += "\"/>\n";
+  out += "<polyline style=\"fill:none;stroke:blue;stroke-width:3\" points=\"";
+  for (int i=0;i<nsamples;i++) {
+    int is = (i+isample) % nsamples;
+    float x=width*i/nsamples;
+    float y=height*(humidityTS[is]-hMin)/(hMax-hMin);
+    out += (String) x+","+(String) y+" ";
+  }
+  out += "\"/>\n";
+  out += "<polyline style=\"fill:none;stroke:red;stroke-width:3\" points=\"";
+  for (int i=0;i<nsamples;i++) {
+    int is = (i+isample) % nsamples;
+    float x=width*i/nsamples;
+    float y=height*(temperatureTS[is]-tMin)/(tMax-tMin);
+    out += (String) x+","+(String) y+" ";
+  }
+  out += "\"/>\n";
+  out += "</svg>";
+  return out;
+}
+
 /*****************************************************************
  * Send out the stylesheet header
  */
 String styleHeader() {
   String out = "<style>";
-  out += " body {background-color: #ffffff; font-family: sans-serif; font-size: 24pt;}";
-  out += " table {width: 80%; margin-left:auto; margin-right:auto; font-size: 24pt;}";
+  out += " body {background-color: #ffffff; font-family: sans-serif; font-size: 14pt;}";
+  out += " table {width: 80%; margin-left:auto; margin-right:auto; font-size: 14pt;}";
   out += " th, td {border-bottom: 1px solid #ddd;}";
   out += " tr:nth-child(odd) {background-color: #f2f2f2}";
   out += " .buttonOn    {background-color: #4CAF50; border-radius: 10%; font-size: 24pt;}";
