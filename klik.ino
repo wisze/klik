@@ -190,15 +190,6 @@ void setup() {
     String message = "<html><head>";
     message += styleHeader();
     message += "</head><body>";
-    message += "<table>";
-    message += "<p>Sensors</p>";
-    message += tableHead("parameter", "value");
-    message += tableRow("temperature (C)",(String)temperature);
-    message += tableRow("humidity (%)",   (String)humidity);
-    message += tableRow("pressure (hPa)", (String)pressure);
-    message += tableRow("light (V)",      (String)vout);
-    message += tableRow("time",         printDateTime(epoch));
-    message += "</table>";
     message += "<p>Switches</p>";
     message += "<form method=\"get\" action=\"/home\"><table>";
     for (int is=0;is<nswitch;is++) {
@@ -210,6 +201,23 @@ void setup() {
       }
     }
     message += "</table></form>";
+ 
+    message += "<p>Sensors</p>";
+    message += "<table>";
+    message += tableHead("parameter", "value");
+    message += tableRow("temperature (C)",(String)temperature);
+    message += tableRow("humidity (%)",   (String)humidity);
+    message += tableRow("pressure (hPa)", (String)pressure);
+    message += tableRow("light (V)",      (String)vout);
+    message += tableRow("time",         printDateTime(epoch));
+    message += "</table>";
+    
+    message += "<p>Metingen over een periode van "+(String) (nsamples*sampleinterval)+" minuten.\n";
+    message += "Met een meting iedere "+(String) sampleinterval+" minuten.</p>\n";
+    message += "<p><center>\n";
+    message += graph(nsamples);
+    message += "</center>";
+    
     message += "</body></html>";
     server.send(200, "text/html", message);
     Serial.println("Request for / handled");
@@ -651,9 +659,9 @@ float getPressure() {
  * Read temperature sensor
  */
 float getTemperature() {
-  humidity = dht.readHumidity();
-  delay(100);
   temperature = dht.readTemperature();
+  delay(100);
+  humidity = dht.readHumidity();
   Serial.print("{temperature:");
   Serial.print(temperature);
   Serial.print(",humidity:");
@@ -745,13 +753,16 @@ String button(String t, String c, String n, String v) {
 /**
  * Returns a graph of the measurements in SVG
  * First get minimum and maximum of all time series
+ * The measurement arrays are filled and refilled with the 
+ * latest value at isample-1, the oldest is thus at isample.
+ * So we start plotting from isample to isample-1 mod nsamples.
  */
 String graph(int ns) {
   int width=600;
   int height=400;
-  float hMin=1000.0; float hMax=-1000.0;
-  float pMin=1000.0; float pMax=-1000.0;
-  float tMin=1000.0; float tMax=-1000.0;
+  float hMin= 100.0; float hMax=    0.0;
+  float pMin=2000.0; float pMax=    0.0;
+  float tMin=  50.0; float tMax=  -50.0;
   for (int i=0;i<nsamples;i++) {
       tMin = min(temperatureTS[i],tMin);
       tMax = max(temperatureTS[i],tMax);
@@ -765,7 +776,7 @@ String graph(int ns) {
   for (int i=0;i<nsamples;i++) {
     int is = (i+isample) % nsamples;
     float x=width*i/nsamples;
-    float y=height*(pressureTS[is]-pMin)/(pMax-pMin);
+    float y=height*(1.0-(pressureTS[is]-pMin)/(pMax-pMin));
     out += (String) x+","+(String) y+" ";
   }
   out += "\"/>\n";
@@ -773,7 +784,7 @@ String graph(int ns) {
   for (int i=0;i<nsamples;i++) {
     int is = (i+isample) % nsamples;
     float x=width*i/nsamples;
-    float y=height*(humidityTS[is]-hMin)/(hMax-hMin);
+    float y=height*(1.0-(humidityTS[is]-hMin)/(hMax-hMin));
     out += (String) x+","+(String) y+" ";
   }
   out += "\"/>\n";
@@ -781,7 +792,7 @@ String graph(int ns) {
   for (int i=0;i<nsamples;i++) {
     int is = (i+isample) % nsamples;
     float x=width*i/nsamples;
-    float y=height*(temperatureTS[is]-tMin)/(tMax-tMin);
+    float y=height*(1.0-(temperatureTS[is]-tMin)/(tMax-tMin));
     out += (String) x+","+(String) y+" ";
   }
   out += "\"/>\n";
