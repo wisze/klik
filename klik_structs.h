@@ -25,7 +25,8 @@ struct SwitchCommand {
 };
 
 struct Switch {
-  int no;
+  int  no;
+  char group;
   String name;
 };
 
@@ -53,6 +54,3 @@ struct Datastream{
 struct Observation {
   float result;
 };
-
-
-
