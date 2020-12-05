@@ -55,8 +55,8 @@
 #include "klik_structs.h"  // Structures
 #include "sensors.h";
 
-const char* ssid = "";
-const char* password = "";
+const char* ssid = "********";
+const char* password = "********";
 const char* sitename = "klik";
 
 /*****************************************************************
@@ -103,8 +103,8 @@ WiFiUDP udp;
 /*****************************************************************
  * Automatic switches, switch on when it is dark
  */
-const float dark = 3.00;       // it's dark below this voltage
-const char group = 'J';        // switch group
+const float dark = 0.10;       // it's dark below this voltage
+// const char group = 'J';        // switch group
 const int nswitch = 8;         // number of switches
 const int switchinterval = 3;  // switch every three minutes
 
@@ -127,22 +127,26 @@ void setup() {
   /***********************
    * Lights and scheduling
    **/
-  light[0] = {1, "Schemerlamp"};
-  light[1] = {2, "Keuken"};
-  light[2] = {3, "Balkon"};
-   
+  light[0] = {1, 'J', "Keuken"};
+  light[1] = {2, 'J', "Lotek"};
+  light[2] = {3, 'J', "Leeslamp"};   
+  light[3] = {4, 'J', "Hal"};
+  light[4] = {1, 'L', "Kerst"};
+  
   /**
    * Scheduling
    * number, time to switch on, time to switch off
    **/
-  sc[0] = {1, timetosec("17:00:00"), timetosec("21:30:00"), false};
-  sc[1] = {2, timetosec("14:00:00"), timetosec("22:00:00"), false};
-  sc[2] = {2, timetosec("04:30:00"), timetosec("05:15:00"), false};
-  sc[3] = {3, timetosec("14:05:00"), timetosec("22:15:00"), false};
-  sc[4] = {3, timetosec("04:30:00"), timetosec("06:00:00"), false};
+  sc[0] = {0, timetosec("17:00:00"), timetosec("22:30:00"), false};
+  sc[1] = {1, timetosec("14:00:00"), timetosec("21:00:00"), false};
+  sc[2] = {2, timetosec("14:05:00"), timetosec("21:30:00"), false};
+  sc[3] = {3, timetosec("18:30:00"), timetosec("21:30:00"), false};
+  sc[4] = {1, timetosec("06:30:00"), timetosec("08:00:00"), false};
+  sc[5] = {0, timetosec("04:45:00"), timetosec("08:00:00"), false};
+  sc[6] = {4, timetosec("04:30:00"), timetosec("08:00:00"), false};
 
   /**
-   * Sensorthings stuff 
+   * Sensorthiscngs stuff 
    **/
   things[0] = {"Klik", "Klik meet in huis."};
    
@@ -250,6 +254,7 @@ void setup() {
       int s1 = server.arg(i).indexOf(",");
       int s2 = server.arg(i).length();
       String sw = server.arg(i).substring(0, s1);
+      int is = sw.toInt()-1;
       String cm = server.arg(i).substring(s1 + 1, s2);
       message += "switch number " + sw + " " + cm + "\n";
       boolean cl;
@@ -269,7 +274,7 @@ void setup() {
       Serial.print(message);
       // Send out the switch command three times because what i tell you three times is true
       for (int iklik = 0; iklik < 3; iklik++) {
-        kaKuSwitch.sendSignal(group, sw.toInt(), cl);
+        kaKuSwitch.sendSignal(light[is].group, light[is].no, cl);
         delay(25);
       }
     }
@@ -410,7 +415,7 @@ void loop(void) {
     Serial.println("Hoofdschakelaar");
     for (int iswitch = 0; iswitch < nswitch; iswitch++) {
       for (int iklik = 0; iklik < 3; iklik++) {
-        kaKuSwitch.sendSignal(group, iswitch, klik);
+        kaKuSwitch.sendSignal(light[iswitch].group, light[iswitch].no, klik);
         delay(20);
       }
     }
@@ -445,11 +450,12 @@ void loop(void) {
   if ( (now.dsec%(switchinterval*60)) == 0 ) {
     getLight();
     for (int is=0;is<nswitch;is++) {
+      int ilight = sc[is].no;
       // Light should be on
       if (now.dsec>sc[is].whenOn && now.dsec<sc[is].whenOff) {
         if (!sc[is].on && !itsLight() ) { // but it isn't and it's dark, so send out an "on" command
           for (int iklik = 0; iklik < 3; iklik++) {
-            kaKuSwitch.sendSignal(group, sc[is].no, true);
+            kaKuSwitch.sendSignal(light[ilight].group, light[ilight].no, true);
             delay(250);
           }
           sc[is].on=true;
@@ -457,7 +463,7 @@ void loop(void) {
       } else { // light should be off
         if (sc[is].on) { // but it isn't, so send out the "off" command
           for (int iklik = 0; iklik < 3; iklik++) {
-            kaKuSwitch.sendSignal(group, sc[is].no, false);
+            kaKuSwitch.sendSignal(light[ilight].group, light[ilight].no, false);
             delay(250);
           }
           sc[is].on=false;
