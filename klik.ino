@@ -55,8 +55,8 @@
 #include "klik_structs.h"  // Structures
 #include "sensors.h";
 
-const char* ssid = "********";
-const char* password = "********";
+const char* ssid = "*******";
+const char* password = "*******";
 const char* sitename = "klik";
 
 /*****************************************************************
@@ -72,7 +72,7 @@ const int temperaturePin = 12; // DHT temperature and humidity sensor
 const int lightPin = 0;        // Analog pin for the light resistor
 
 const int waitfor = 1000;
-const int sampleinterval = 15; // sample every 15 minutes
+const int sampleinterval = 5; // sample every 5 minutes
 int ncount = 10000000; // Number of cycles between sensor checks
 int icount = 0;        // Loop counter for main loop(), get sensor values every ncount cycles
 float temperature, humidity, pressure, lux, vout;
@@ -88,22 +88,16 @@ Adafruit_BMP085 bmp;
 /*****************************************************************
  * To get time from an NTP server
  **/
-unsigned int localPort = 2390;
-// Unix time starts on Jan 1 1970. In seconds, that's 2208988800:
-const unsigned long seventyYears = 2208988800UL;
-unsigned long epoch, epoch0; // Unix time in seconds since 1970
-unsigned long timechecked;
-IPAddress timeServerIP; // time.nist.gov NTP server address
-const char* ntpServerName = "time.nist.gov";
-const int NTP_PACKET_SIZE = 48; // NTP time stamp is in the first 48 bytes of the message
-byte packetBuffer[ NTP_PACKET_SIZE]; //buffer to hold incoming and outgoing packets
-// A UDP instance to let us send and receive packets over UDP
-WiFiUDP udp;
+const char* ntpServer = "pool.ntp.org";
+const long  gmtOffset_sec = 3600;   //Replace with your GMT offset (seconds)
+const int   daylightOffset_sec = 3600;  //Replace with your daylight offset (seconds
+time_t epoch, epoch0; // Unix time in seconds since 1970
+time_t sampleTime, lastCheck;
 
 /*****************************************************************
  * Automatic switches, switch on when it is dark
  */
-const float dark = 0.10;       // it's dark below this voltage
+const float dark = 0.03;       // it's dark below this voltage
 // const char group = 'J';        // switch group
 const int nswitch = 8;         // number of switches
 const int switchinterval = 3;  // switch every three minutes
@@ -116,7 +110,6 @@ Switch light[nswitch];
  **/
 const int buttonSwitch = 16;
 boolean buttonState, lastButtonState;
-// const long pressTime  = 10;
 boolean klik = true;
 
 /*****************************************************************
@@ -131,41 +124,26 @@ void setup() {
   light[1] = {2, 'J', "Lotek"};
   light[2] = {3, 'J', "Leeslamp"};   
   light[3] = {4, 'J', "Hal"};
-  light[4] = {1, 'L', "Kerst"};
   
   /**
    * Scheduling
    * number, time to switch on, time to switch off
    **/
   sc[0] = {0, timetosec("17:00:00"), timetosec("22:30:00"), false};
-  sc[1] = {1, timetosec("14:00:00"), timetosec("21:00:00"), false};
-  sc[2] = {2, timetosec("14:05:00"), timetosec("21:30:00"), false};
-  sc[3] = {3, timetosec("18:30:00"), timetosec("21:30:00"), false};
+  sc[1] = {1, timetosec("14:00:00"), timetosec("22:00:00"), false};
+  sc[2] = {2, timetosec("14:05:00"), timetosec("22:30:00"), false};
+  sc[3] = {3, timetosec("18:30:00"), timetosec("22:30:00"), false};
   sc[4] = {1, timetosec("06:30:00"), timetosec("08:00:00"), false};
   sc[5] = {0, timetosec("04:45:00"), timetosec("08:00:00"), false};
-  sc[6] = {4, timetosec("04:30:00"), timetosec("08:00:00"), false};
 
   /**
    * Sensorthiscngs stuff 
    **/
   things[0] = {"Klik", "Klik meet in huis."};
    
-  Serial.begin(115200);
+  Serial.begin(19200);
   delay(10);
 
-  // Start the sensors
-  dht.begin();
-  bmp.begin();
-
-  // Init LED pins
-  Serial.println("Init LEDs");
-  for (int thisPin = 0; thisPin < leds; thisPin++) {
-    pinMode(ledPins[thisPin], OUTPUT);
-  }
-
-  // Button pin on input
-  pinMode(buttonSwitch, INPUT);
-  
   // Red LED on during setup()
   led(0, "on");
 
@@ -189,7 +167,20 @@ void setup() {
   Serial.print("http://");
   Serial.print(WiFi.localIP());
   Serial.println("/");
+  
+  // Start the sensors
+  dht.begin();
+  bmp.begin();
 
+  // Init LED pins
+  Serial.println("Init LEDs");
+  for (int thisPin = 0; thisPin < leds; thisPin++) {
+    pinMode(ledPins[thisPin], OUTPUT);
+  }
+
+  // Button pin on input
+  pinMode(buttonSwitch, INPUT);
+  
   server.on("/", []() {
     String message = "<html><head>";
     message += styleHeader();
@@ -213,7 +204,7 @@ void setup() {
     message += tableRow("humidity (%)",   (String)humidity);
     message += tableRow("pressure (hPa)", (String)pressure);
     message += tableRow("light (V)",      (String)vout);
-    message += tableRow("time",         printDateTime(epoch));
+    message += tableRow("time",           asctime(localtime(&epoch)));
     message += "</table>";
     
     message += "<p>Metingen over een periode van "+(String) (nsamples*sampleinterval)+" minuten.\n";
@@ -309,8 +300,8 @@ void setup() {
   
   server.on("/sensors", []() {
     String message = "{ \"sample\": [\n";
-    message += "  {\"date\": \"" + printDate(epoch) + "\"},\n";
-    message += "  {\"time\": \"" + printTime(epoch) + "\"},\n";
+    // message += "  {\"date\": \"" + printDate(epoch) + "\"},\n";
+    // message += "  {\"time\": \"" + printTime(epoch) + "\"},\n";
     message += "  {\"temperature\": { \"value\": " + (String)temperature + ", \"unit_of_measurement\": \"°C\" }},\n";
     message += "  {\"humidity\": { \"value\": " + (String)humidity + ", \"unit_of_measurement\": \"%\" }},\n";
     message += "  {\"pressure\": { \"value\": " + (String)(pressure) + ", \"unit_of_measurement\": \"hPa\" }},\n";
@@ -371,23 +362,24 @@ void setup() {
   server.begin();
   Serial.println("Server started");
 
-  udp.begin(localPort);
-  // Serial.println(udp.localPort());
-  boolean gottime = getTimeNTP();
-
+  configTime(gmtOffset_sec, daylightOffset_sec, ntpServer);
+  epoch  = getTime();
+  
+  isample = 0;
+  // LEDs off
+  led(0, "off");
+  led(1, "off");
+  led(2, "off");
+  
   /**
    * Initial sensor readings
    **/
   getPressure();
   getTemperature();
   getLight();
-  epoch  = getTime();
+  Serial.println("Sensors geinitialiseerd");
 
-  isample = 0;
-  // LEDs off
-  led(0, "off");
-  led(1, "off");
-  led(2, "off");
+  Serial.println("Init done");
 }
 
 /*****************************************************************
@@ -399,8 +391,10 @@ void loop(void) {
   /**
    * Get current time
    **/
-  unsigned long e = getTime();
-  DateTime now = epoch2datetime(e);
+  struct tm * timeinfo;
+  time (&epoch);
+  timeinfo = localtime (&epoch);
+  Serial.println(asctime(timeinfo));
 
   /** 
    * Handle server response
@@ -427,17 +421,18 @@ void loop(void) {
   /************************************************
    * Get sensor values every sampleinterval seconds
    **/
-  if ((now.dsec%(sampleinterval*60))==0) { // this only works because sampling takes more than one second
+  if (difftime(epoch,sampleTime)>60) {
+    sampleTime = epoch;
     getTemperature();
     getPressure();
     getLight();
     epoch  = getTime();
-    Serial.println(printDateTime(epoch));
+    Serial.println(asctime(localtime(&epoch)));
     // store the current values into the array
     temperatureTS[isample] = temperature;
     humidityTS[isample] = humidity;
     pressureTS[isample] = pressure;
-    timeTS[isample] = printDateTime(epoch);
+    timeTS[isample] = asctime(localtime(&epoch));
     isample++;
     if (isample==nsamples) {isample=0;};
     // LED flashing also gives a 1 second delay, don't remove this line
@@ -447,12 +442,13 @@ void loop(void) {
   /*******************************
    * Handle the scheduled switches
    **/
-  if ( (now.dsec%(switchinterval*60)) == 0 ) {
+  if (difftime(epoch,lastCheck)>sampleinterval*60) {
+    lastCheck = epoch;
     getLight();
     for (int is=0;is<nswitch;is++) {
       int ilight = sc[is].no;
       // Light should be on
-      if (now.dsec>sc[is].whenOn && now.dsec<sc[is].whenOff) {
+      if ( difftime(epoch,sc[is].whenOn)>0 && difftime(sc[is].whenOff,epoch)<0 ){
         if (!sc[is].on && !itsLight() ) { // but it isn't and it's dark, so send out an "on" command
           for (int iklik = 0; iklik < 3; iklik++) {
             kaKuSwitch.sendSignal(light[ilight].group, light[ilight].no, true);
@@ -496,123 +492,15 @@ void led(int l, String cm) {
 /*****************************************************************
  * getTime() gets a rough time from the number of seconds running
  */
-unsigned long getTime() {
-
-  unsigned long now = millis();
-  unsigned long sincecheck = now - timechecked;
-  unsigned long newepoch;
-
-  /**
-   *  sincecheck should be positive or else millis() has reset to zero
-   *  If we have had a millis() rollover we get a new sync from NTP and a new timechecked
-   */
-  if (sincecheck < 0) {
-    getTimeNTP();
-    sincecheck = now - timechecked;
-  }
-
-  newepoch = epoch0 + sincecheck / 1000;
-  // Serial.println(printDateTime(newepoch));
-  return newepoch;
-}
-
-/*****************************************************************
- * getNTPTime gets the time from an NTP server
- */
-boolean getTimeNTP() {
-  //get a random server from the pool
-  WiFi.hostByName(ntpServerName, timeServerIP);
-  Serial.print("Get time from ");
-  Serial.println(timeServerIP);
-
-  sendNTPpacket(timeServerIP);
-  delay(waitfor);
-
-  int cb = udp.parsePacket();
-  while (!cb) { // keep requesting if there is no answer in a second
-    sendNTPpacket(timeServerIP);
-    Serial.print(".");
-    delay(waitfor);
-    cb = udp.parsePacket();
-  }
-  Serial.println("");
-  // We've received a packet, read the data from it
-  udp.read(packetBuffer, NTP_PACKET_SIZE); // read the packet into the buffer
-  unsigned long highWord = word(packetBuffer[40], packetBuffer[41]);
-  unsigned long lowWord = word(packetBuffer[42], packetBuffer[43]);
-  // combine the four bytes (two words) into a long integer
-  // this is NTP time (seconds since Jan 1 1900):
-  unsigned long secsSince1900 = highWord << 16 | lowWord;
-  Serial.print("Seconds since Jan 1 1900 = " );
-  Serial.println(secsSince1900);
-
-  // now convert NTP time into everyday time:
-  // Serial.print("Unix time = ");
-  // subtract seventy years:
-  epoch0 = secsSince1900 - seventyYears;
-  Serial.println(printTime(epoch0));
-  timechecked  = millis();
-  Serial.print("Time running ");
-  Serial.println ((String)(timechecked / 1000.0));
-  epoch = epoch0;
-  return true;
-}
-// send an NTP request to the time server at the given address
-unsigned long sendNTPpacket(IPAddress& address) {
-  // Serial.println("sending NTP packet...");
-  // set all bytes in the buffer to 0
-  memset(packetBuffer, 0, NTP_PACKET_SIZE);
-  // Initialize values needed to form NTP request
-  // (see URL above for details on the packets)
-  packetBuffer[0] = 0b11100011;   // LI, Version, Mode
-  packetBuffer[1] = 0;     // Stratum, or type of clock
-  packetBuffer[2] = 6;     // Polling Interval
-  packetBuffer[3] = 0xEC;  // Peer Clock Precision
-  // 8 bytes of zero for Root Delay & Root Dispersion
-  packetBuffer[12]  = 49;
-  packetBuffer[13]  = 0x4E;
-  packetBuffer[14]  = 49;
-  packetBuffer[15]  = 52;
-
-  // all NTP fields have been given values, now
-  // you can send a packet requesting a timestamp:
-  udp.beginPacket(address, 123); //NTP requests are to port 123
-  udp.write(packetBuffer, NTP_PACKET_SIZE);
-  udp.endPacket();
-}
-
-DateTime epoch2datetime(uint32_t e) {
-  DateTime rtc;
-  // - Convert seconds to year, day of year, day of week, hours, minutes, seconds
-  rtc.dsec = e % 86400;  // Seconds since midnight
-  rtc.sec  = e % 60;
-  rtc.min = e % 3600 / 60;
-  rtc.hour = e % 86400 / 3600;
-  rtc.dow = ( e % (86400 * 7) / 86400 ) + 4;  
-  int doy = e % (86400 * 365) / 86400;
-  unsigned yr = e / (86400 * 365) + 1970;
-  unsigned ly;                                        // Leap year
-  for (ly = 1972; ly < yr; ly += 4) {                 // Adjust year and day of year for leap years
-    if (!(ly % 100) && (ly % 400)) continue;        // Skip years that are divisible by 100 and not by 400
-    --doy;                                          //
-  }                                                   //
-  if (doy < 0) doy += 365, ++yr;                      // Handle day of year underflow
-  rtc.year = yr;
-  // - Find month and day of month from day of year
-  static uint8_t const dm[2][12] = {                  // Days in each month
-    { 31, 28, 31, 30, 31, 30, 31, 31, 30, 31, 30, 31}, // Not a leap year
-    { 31, 29, 31, 30, 31, 30, 31, 31, 30, 31, 30, 31}  // Leap year
-  };                                                  //
-  int day = doy;                                      // Init day of month
-  rtc.month = 0;                                      // Init month
-  ly = (yr == ly) ? 1 : 0;                            // Make leap year index 0 = not a leap year, 1 = is a leap year
-  while (day > dm[ly][rtc.month]) day -= dm[ly][rtc.month++]; // Calculate month and day of month
-  rtc.doy = doy + 1;                                  // - Make date ones based
-  rtc.day = day + 1;
-  rtc.month = rtc.month + 1;
-
-  return rtc;
-}  
+time_t getTime() {
+  time_t rawtime;
+  struct tm * timeinfo;
+  time (&rawtime);
+  timeinfo = localtime (&rawtime);
+  Serial.println(asctime(timeinfo));
+  delay(1000);
+  return rawtime;
+} 
 // From "2:00:00" to 7200   
 int timetosec(String d) {
   int s1 = d.indexOf(":");
@@ -623,31 +511,6 @@ int timetosec(String d) {
   int s = d.substring(s2+1,s3).toInt();
   int t = h*3600+m*60+s;
   return t;
-}
-String printTime(unsigned long e) {
-  DateTime t = epoch2datetime(e);
-  // String out = (String)t.hour + ":" + (String)t.min + ":" + (String)t.sec;
-  char buff[8];
-  sprintf(buff,"%02d:%02d:%02d",t.hour,t.min,t.sec);
-  String out = String(buff);
-  return out;
-}                                                  //
-String printDate(unsigned long e) {
-  DateTime t = epoch2datetime(e);
-  // String out = (String)t.day + "-" + (String)t.month + "-" + (String)t.year;
-  char buff[10];
-  sprintf(buff,"%02d-%02d-%04d",t.day,t.month,t.year);
-  String out = String(buff);
-  return out;
-}                                                //
-String printDateTime(unsigned long e) {
-  DateTime t = epoch2datetime(e);
-  // String out = (String)t.day + "-" + (String)t.month + "-" + (String)t.year + " ";
-  // out += (String)t.hour + ":" + (String)t.min + ":" + (String)t.sec + " UTC";
-  char buff[24];
-  sprintf(buff,"%04d-%02d-%02dT%02d:%02d:%02dZ",t.year,t.month,t.day,t.hour,t.min,t.sec);
-  String out = String(buff);
-  return out;
 }
 
 /*****************************************************************
