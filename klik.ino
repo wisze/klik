@@ -7,8 +7,8 @@
  * 201707 Fully functional but too slow web interface, uses sprint in loop()
  *        reads temperature sensor, pressure sensor and light resistor
  *        and sends out klikaanklikuit commands
- * 201708 completely new setup() and loop(), 
- *        fast web interface css style headers, 
+ * 201708 completely new setup() and loop(),
+ *        fast web interface css style headers,
  *        clock function with regular NTP sync.
  *        conversion of time to calendar
  *        cron-like switching times for automatic switching
@@ -17,6 +17,9 @@
  *        different handling of dark/light
  * 201808 Added units to json response, changed Pa to hPa for pressure
  * 201812 Started on Sensorthings
+ * 201902 Graph page debug
+ * 202012 Schedule improved
+ * 202109 Removed NTP stuff and replaced with standard time.h functions, supports summmer time switch too
  *
  * Todo:
  * - sensorthings protocol
@@ -55,8 +58,8 @@
 #include "klik_structs.h"  // Structures
 #include "sensors.h";
 
-const char* ssid = "*******";
-const char* password = "*******";
+const char* ssid = "********";
+const char* password = "********";
 const char* sitename = "klik";
 
 /*****************************************************************
@@ -104,7 +107,7 @@ const int switchinterval = 3;  // switch every three minutes
 
 SwitchCommand sc[nswitch];
 Switch light[nswitch];
-  
+
 /*****************************************************************
  * Master switch
  **/
@@ -122,9 +125,9 @@ void setup() {
    **/
   light[0] = {1, 'J', "Keuken"};
   light[1] = {2, 'J', "Lotek"};
-  light[2] = {3, 'J', "Leeslamp"};   
+  light[2] = {3, 'J', "Leeslamp"};
   light[3] = {4, 'J', "Hal"};
-  
+
   /**
    * Scheduling
    * number, time to switch on, time to switch off
@@ -137,10 +140,10 @@ void setup() {
   sc[5] = {0, timetosec("04:45:00"), timetosec("08:00:00"), false};
 
   /**
-   * Sensorthiscngs stuff 
+   * Sensorthiscngs stuff
    **/
   things[0] = {"Klik", "Klik meet in huis."};
-   
+
   Serial.begin(19200);
   delay(10);
 
@@ -167,7 +170,7 @@ void setup() {
   Serial.print("http://");
   Serial.print(WiFi.localIP());
   Serial.println("/");
-  
+
   // Start the sensors
   dht.begin();
   bmp.begin();
@@ -180,7 +183,7 @@ void setup() {
 
   // Button pin on input
   pinMode(buttonSwitch, INPUT);
-  
+
   server.on("/", []() {
     String message = "<html><head>";
     message += styleHeader();
@@ -196,7 +199,7 @@ void setup() {
       }
     }
     message += "</table></form>";
- 
+
     message += "<p>Sensors</p>";
     message += "<table>";
     message += tableHead("parameter", "value");
@@ -206,13 +209,13 @@ void setup() {
     message += tableRow("light (V)",      (String)vout);
     message += tableRow("time",           asctime(localtime(&epoch)));
     message += "</table>";
-    
+
     message += "<p>Metingen over een periode van "+(String) (nsamples*sampleinterval)+" minuten.\n";
     message += "Met een meting iedere "+(String) sampleinterval+" minuten.</p>\n";
     message += "<p><center>\n";
     message += graph(nsamples);
     message += "</center>";
-    
+
     message += "</body></html>";
     server.send(200, "text/html", message);
     Serial.println("Request for / handled");
@@ -261,7 +264,7 @@ void setup() {
       if (cm.equals("twilight")) { // keep trying to switch on until it is dark
         // TODO
       }
-      
+
       Serial.print(message);
       // Send out the switch command three times because what i tell you three times is true
       for (int iklik = 0; iklik < 3; iklik++) {
@@ -297,7 +300,7 @@ void setup() {
     String message = "{\"light\": " + (String)lux + ", \"unit_of_measurement\": \"Volt\" }";
     server.send(200, "application/json", message);
   });
-  
+
   server.on("/sensors", []() {
     String message = "{ \"sample\": [\n";
     // message += "  {\"date\": \"" + printDate(epoch) + "\"},\n";
@@ -311,7 +314,7 @@ void setup() {
     server.send(200, "application/json", message);
   });
 
-  /** 
+  /**
    * Sensorthings stuff
    */
   server.on("/sensorthings/v1.0" , []() {
@@ -325,7 +328,7 @@ void setup() {
     message += "] }";
     server.send(200, "application/json", message );
   });
-  
+
   server.on("/sensorthings/v1.0/Things", []() {
     String ID = server.arg("ID");
     /** if (ID == "on") doeiets; **/
@@ -337,7 +340,7 @@ void setup() {
     message += "] }";
     server.send(200, "application/json", message );
   });
-  
+
   /**
    * Send out *all* observations in memory
    */
@@ -364,13 +367,13 @@ void setup() {
 
   configTime(gmtOffset_sec, daylightOffset_sec, ntpServer);
   epoch  = getTime();
-  
+
   isample = 0;
   // LEDs off
   led(0, "off");
   led(1, "off");
   led(2, "off");
-  
+
   /**
    * Initial sensor readings
    **/
@@ -396,12 +399,12 @@ void loop(void) {
   timeinfo = localtime (&epoch);
   Serial.println(asctime(timeinfo));
 
-  /** 
+  /**
    * Handle server response
    **/
   server.handleClient();
 
-  /** 
+  /**
    *  Switch pressed
    */
   buttonState = digitalRead(buttonSwitch);
@@ -413,11 +416,11 @@ void loop(void) {
         delay(20);
       }
     }
-    klik = !klik; 
+    klik = !klik;
     led(2,"flash");
   }
   lastButtonState = buttonState;
-  
+
   /************************************************
    * Get sensor values every sampleinterval seconds
    **/
@@ -438,7 +441,7 @@ void loop(void) {
     // LED flashing also gives a 1 second delay, don't remove this line
     led(1, "flash");
   }
-    
+
   /*******************************
    * Handle the scheduled switches
    **/
@@ -467,7 +470,7 @@ void loop(void) {
       }
     }
   }
-  
+
   // Reset all switches once a day
   // if (now.dsec = 0) {for (int is=0;is<nswitch;is++) {sc[is].done = false;}}
 }
@@ -500,8 +503,8 @@ time_t getTime() {
   Serial.println(asctime(timeinfo));
   delay(1000);
   return rawtime;
-} 
-// From "2:00:00" to 7200   
+}
+// From "2:00:00" to 7200
 int timetosec(String d) {
   int s1 = d.indexOf(":");
   int s2 = d.indexOf(":",s1);
@@ -546,13 +549,13 @@ float getLight() {
   float vin = 3.3; //input voltage
   float refresist = 10000.0;
   int adc = analogRead(lightPin);
-  
+
   vout = adc*(vin/1024.0);
-  
+
   float ldresist = refresist * (vin - vout) / vout;
   lux = 1e7 * pow(ldresist, (float) -1.5); // pretty rough estimate
   // if (!itsLight()) {led(2, "flash");} else {led(2, "off");}
-  
+
   Serial.print("{light, ADC:");
   Serial.print(adc);
   Serial.print(", lumen:");
@@ -622,7 +625,7 @@ String button(String t, String c, String n, String v) {
 /**
  * Returns a graph of the measurements in SVG
  * First get minimum and maximum of all time series
- * The measurement arrays are filled and refilled with the 
+ * The measurement arrays are filled and refilled with the
  * latest value at isample-1, the oldest is thus at isample.
  * So we start plotting from isample to isample-1 mod nsamples.
  */
