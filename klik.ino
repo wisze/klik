@@ -50,10 +50,9 @@
 #include <ESP8266WiFi.h>
 #include <ESP8266WebServer.h>
 #include <RemoteSwitch.h>
-#include <RemoteReceiver.h>
 #include "DHT.h"
 #include <Wire.h>
-#include <Adafruit_BMP085.h>
+// #include <Adafruit_BMP085.h>
 #include <WiFiUdp.h>
 #include "klik_structs.h"  // Structures
 #include "sensors.h";
@@ -86,7 +85,7 @@ String webString = "";
 ESP8266WebServer server(80);
 DHT dht(temperaturePin, DHT22, 24); // the last parameter is some weird number needed because the wemos is too fast for the temperature sensor
 KaKuSwitch kaKuSwitch(transmitPin);
-Adafruit_BMP085 bmp;
+// Adafruit_BMP085 bmp;
 
 /*****************************************************************
  * To get time from an NTP server
@@ -102,7 +101,7 @@ time_t sampleTime, lastCheck;
  */
 const float dark = 0.03;       // it's dark below this voltage
 // const char group = 'J';        // switch group
-const int nswitch = 8;         // number of switches
+const int nswitch = 6;         // number of switches
 const int switchinterval = 3;  // switch every three minutes
 
 SwitchCommand sc[nswitch];
@@ -140,11 +139,11 @@ void setup() {
   sc[5] = {0, timetosec("04:45:00"), timetosec("08:00:00"), false};
 
   /**
-   * Sensorthiscngs stuff
+   * Sensorthings stuff
    **/
   things[0] = {"Klik", "Klik meet in huis."};
 
-  Serial.begin(19200);
+  Serial.begin(9600);
   delay(10);
 
   // Red LED on during setup()
@@ -173,7 +172,7 @@ void setup() {
 
   // Start the sensors
   dht.begin();
-  bmp.begin();
+  // bmp.begin();
 
   // Init LED pins
   Serial.println("Init LEDs");
@@ -382,6 +381,16 @@ void setup() {
   getLight();
   Serial.println("Sensors geinitialiseerd");
 
+  for (int is=0;is<nswitch;is++) {
+     sc[is].on=1;
+     int ilight = sc[is].no;
+     Serial.print(light[ilight].name);
+     Serial.print(" ");
+     Serial.print(sc[is].whenOn);
+     Serial.print(" - ");
+     Serial.println(sc[is].whenOff);
+  }
+
   Serial.println("Init done");
 }
 
@@ -397,7 +406,7 @@ void loop(void) {
   struct tm * timeinfo;
   time (&epoch);
   timeinfo = localtime (&epoch);
-  Serial.println(asctime(timeinfo));
+  // Serial.print(asctime(timeinfo));
 
   /**
    * Handle server response
@@ -424,13 +433,14 @@ void loop(void) {
   /************************************************
    * Get sensor values every sampleinterval seconds
    **/
-  if (difftime(epoch,sampleTime)>60) {
+  if (difftime(epoch,sampleTime)>sampleinterval*60) {
     sampleTime = epoch;
     getTemperature();
     getPressure();
     getLight();
     epoch  = getTime();
-    Serial.println(asctime(localtime(&epoch)));
+    Serial.print("Sensor reading at ");
+    Serial.print(asctime(localtime(&epoch)));
     // store the current values into the array
     temperatureTS[isample] = temperature;
     humidityTS[isample] = humidity;
@@ -451,12 +461,16 @@ void loop(void) {
     for (int is=0;is<nswitch;is++) {
       int ilight = sc[is].no;
       // Light should be on
-      if ( difftime(epoch,sc[is].whenOn)>0 && difftime(sc[is].whenOff,epoch)<0 ){
+      if ((epoch%86400-sc[is].whenOn)>0 && (epoch%86400-sc[is].whenOff)<0 ){
         if (!sc[is].on && !itsLight() ) { // but it isn't and it's dark, so send out an "on" command
           for (int iklik = 0; iklik < 3; iklik++) {
             kaKuSwitch.sendSignal(light[ilight].group, light[ilight].no, true);
             delay(250);
           }
+          Serial.print("Timed switch ");
+          Serial.print(light[ilight].name);
+          Serial.print(" on at: ");
+          Serial.print(asctime(localtime(&epoch)));
           sc[is].on=true;
         }
       } else { // light should be off
@@ -465,10 +479,16 @@ void loop(void) {
             kaKuSwitch.sendSignal(light[ilight].group, light[ilight].no, false);
             delay(250);
           }
+          Serial.print("Timed switch ");
+          Serial.print(light[ilight].name);
+          Serial.print(" off at: ");
+          Serial.print(asctime(localtime(&epoch)));
           sc[is].on=false;
         }
       }
     }
+    Serial.print("Check lights at ");
+    Serial.print(asctime(localtime(&epoch)));
   }
 
   // Reset all switches once a day
@@ -500,7 +520,7 @@ time_t getTime() {
   struct tm * timeinfo;
   time (&rawtime);
   timeinfo = localtime (&rawtime);
-  Serial.println(asctime(timeinfo));
+  // Serial.println(asctime(timeinfo));
   delay(1000);
   return rawtime;
 }
@@ -520,7 +540,7 @@ int timetosec(String d) {
  * Get the air pressure and store it
  */
 float getPressure() {
-  pressure = bmp.readPressure() / 100.0;
+  // pressure = bmp.readPressure() / 100.0;
   Serial.print("{pressure:");
   Serial.print(pressure);
   Serial.println("}");
