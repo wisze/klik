@@ -2,7 +2,6 @@
  * Sensor definitions for klik sensorthings
  */
 
-
 const int nthings = 1;
 Thing things[nthings];
 
@@ -12,7 +11,7 @@ Datastream streams[nstreams];
 /**
  * Time series arrays
  */
-const int nsamples = 100;
+const int nsamples = 360;
 float temperatureTS[nsamples];
 float humidityTS[nsamples];
 float pressureTS[nsamples];

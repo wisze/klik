@@ -52,40 +52,24 @@
 #include <RemoteSwitch.h>
 #include "DHT.h"
 #include <Wire.h>
-// #include <Adafruit_BMP085.h>
+#include <Adafruit_BMP085.h>
 #include <WiFiUdp.h>
 #include "klik_structs.h"  // Structures
 #include "sensors.h";
+#include "klik_config.h";
 
-const char* ssid = "********";
-const char* password = "********";
-const char* sitename = "klik";
+SwitchCommand sc[maxswitch];
+Switch light[maxswitch];
 
-/*****************************************************************
- * Sensor and LED pins
- **/
-const int leds = 3;
-const int ledPins[] = {0, 2, 14};
-
-const int transmitPin = 13;
-// const int receivePin = 15;
-
-const int temperaturePin = 12; // DHT temperature and humidity sensor
-const int lightPin = 0;        // Analog pin for the light resistor
-
-const int waitfor = 1000;
-const int sampleinterval = 5; // sample every 5 minutes
-int ncount = 10000000; // Number of cycles between sensor checks
-int icount = 0;        // Loop counter for main loop(), get sensor values every ncount cycles
+int nswitch;
+float dark;       // it's dark above this voltage
 float temperature, humidity, pressure, lux, vout;
 int isample;
-String webString = "";
 
-// WiFiServer server(80);
 ESP8266WebServer server(80);
 DHT dht(temperaturePin, DHT22, 24); // the last parameter is some weird number needed because the wemos is too fast for the temperature sensor
 KaKuSwitch kaKuSwitch(transmitPin);
-// Adafruit_BMP085 bmp;
+Adafruit_BMP085 bmp;
 
 /*****************************************************************
  * To get time from an NTP server
@@ -95,17 +79,6 @@ const long  gmtOffset_sec = 3600;   //Replace with your GMT offset (seconds)
 const int   daylightOffset_sec = 3600;  //Replace with your daylight offset (seconds
 time_t epoch, epoch0; // Unix time in seconds since 1970
 time_t sampleTime, lastCheck;
-
-/*****************************************************************
- * Automatic switches, switch on when it is dark
- */
-const float dark = 0.03;       // it's dark below this voltage
-// const char group = 'J';        // switch group
-const int nswitch = 6;         // number of switches
-const int switchinterval = 3;  // switch every three minutes
-
-SwitchCommand sc[nswitch];
-Switch light[nswitch];
 
 /*****************************************************************
  * Master switch
@@ -119,6 +92,8 @@ boolean klik = true;
  **/
 void setup() {
 
+#if WOLD
+  dark = 0.3;
   /***********************
    * Lights and scheduling
    **/
@@ -131,13 +106,33 @@ void setup() {
    * Scheduling
    * number, time to switch on, time to switch off
    **/
+  nswitch = 6;
   sc[0] = {0, timetosec("17:00:00"), timetosec("22:30:00"), false};
   sc[1] = {1, timetosec("14:00:00"), timetosec("22:00:00"), false};
   sc[2] = {2, timetosec("14:05:00"), timetosec("22:30:00"), false};
   sc[3] = {3, timetosec("18:30:00"), timetosec("22:30:00"), false};
   sc[4] = {1, timetosec("06:30:00"), timetosec("08:00:00"), false};
   sc[5] = {0, timetosec("04:45:00"), timetosec("08:00:00"), false};
-
+#else
+  dark = 3.0;
+   /***********************
+   * Lights and scheduling
+   **/
+  light[0] = {1, 'J', "Schemerlamp"};
+  light[1] = {2, 'J', "Keuken"};
+  light[2] = {3, 'J', "Balkon"};
+  
+  /**
+   * Scheduling
+   * number, time to switch on, time to switch off
+   **/
+  nswitch = 4;
+  sc[0] = {0, timetosec("14:00:00"), timetosec("21:15:00"), false};
+  sc[1] = {1, timetosec("14:05:00"), timetosec("22:30:00"), false};
+  sc[2] = {2, timetosec("15:00:00"), timetosec("22:30:00"), false};
+  sc[3] = {2, timetosec("04:45:00"), timetosec("09:15:00"), false};
+#endif
+  
   /**
    * Sensorthings stuff
    **/
@@ -154,9 +149,10 @@ void setup() {
   Serial.print(ssid);
   Serial.print(" as ");
   Serial.println(sitename);
+  
+  WiFi.mode(WIFI_STA);
   WiFi.hostname(sitename);
   WiFi.begin(ssid, password);
-
   while (WiFi.status() != WL_CONNECTED) {
     delay(500);
     Serial.print(".");
@@ -172,7 +168,7 @@ void setup() {
 
   // Start the sensors
   dht.begin();
-  // bmp.begin();
+  bmp.begin();
 
   // Init LED pins
   Serial.println("Init LEDs");
@@ -198,7 +194,7 @@ void setup() {
       }
     }
     message += "</table></form>";
-
+    
     message += "<p>Sensors</p>";
     message += "<table>";
     message += tableHead("parameter", "value");
@@ -302,8 +298,6 @@ void setup() {
 
   server.on("/sensors", []() {
     String message = "{ \"sample\": [\n";
-    // message += "  {\"date\": \"" + printDate(epoch) + "\"},\n";
-    // message += "  {\"time\": \"" + printTime(epoch) + "\"},\n";
     message += "  {\"temperature\": { \"value\": " + (String)temperature + ", \"unit_of_measurement\": \"°C\" }},\n";
     message += "  {\"humidity\": { \"value\": " + (String)humidity + ", \"unit_of_measurement\": \"%\" }},\n";
     message += "  {\"pressure\": { \"value\": " + (String)(pressure) + ", \"unit_of_measurement\": \"hPa\" }},\n";
@@ -320,9 +314,7 @@ void setup() {
     String message = "{ \"value\": [";
     message += "  {\"name\": \"Things\", \"url\": \""+server.uri()+"/sensorthings/v1.0/Things\" },";
     message += "  {\"name\": \"Datastreams\", \"url\": \""+server.uri()+"/sensorthings/v1.0/Datastreams\" },";
-    // message += "  {\"name\": \"Sensors\", \"url\": "+server.uri()+"/sensorthings/v1.0/Sensors\" },";
     message += "  {\"name\": \"Observations\", \"url\": \""+server.uri()+"/sensorthings/v1.0/Observations\" },";
-    // message += "  {\"name\": \"ObservedProperties\", \"url\": \""+server.uri()+"/sensorthings/v1.0/ObservedProperties\" },";
     message += "  {\"name\": \"FeaturesOfInterest\", \"url\": \""+server.uri()+"/sensorthings/v1.0/FeaturesOfInterest\" }";
     message += "] }";
     server.send(200, "application/json", message );
@@ -348,10 +340,6 @@ void setup() {
     for (int i=0;i<nsamples;i++) {
        int is = (i + isample) % nsamples;
        if (i>0) {message += ", ";}
-       // message += "{ \"@iot.id\": \"t"+(String)(is)+"\", \"result\": \""+(String)temperatureTS[is]+"\", \"phenomenonTime\": \""+timeTS[is]+"\", \"unitOfMeasurement\": \"°C\", \"FeatureOfInterest@iot.navigationLink\": \""+server.uri()+"(t"+(String)(is)+")\"}, ";
-       // message += "{ \"@iot.id\": \"h"+(String)(is)+"\", \"result\": \""+(String)humidityTS[is]   +"\", \"phenomenonTime\": \""+timeTS[is]+"\", \"unitOfMeasurement\": \"\%\", \"FeatureOfInterest@iot.navigationLink\": \""+server.uri()+"(h"+(String)(is)+")\"}, ";
-       // message += "{ \"@iot.id\": \"p"+(String)(is)+"\", \"result\": \""+(String)pressureTS[is]   +"\", \"phenomenonTime\": \""+timeTS[is]+"\", \"unitOfMeasurement\": \"hPa\", \"FeatureOfInterest@iot.navigationLink\": \""+server.uri()+"(p"+(String)(is)+")\"}";
-
        message += "{ \"@iot.id\": \"t"+(String)(is)+"\", \"result\": \""+(String)temperatureTS[is]+"\", \"phenomenonTime\": \""+timeTS[is]+"\", \"unitOfMeasurement\": \"°C\"}, \n";
        message += "{ \"@iot.id\": \"h"+(String)(is)+"\", \"result\": \""+(String)humidityTS[is]   +"\", \"phenomenonTime\": \""+timeTS[is]+"\", \"unitOfMeasurement\": \"%\"}, \n";
        message += "{ \"@iot.id\": \"p"+(String)(is)+"\", \"result\": \""+(String)pressureTS[is]   +"\", \"phenomenonTime\": \""+timeTS[is]+"\", \"unitOfMeasurement\": \"hPa\"}";
@@ -382,7 +370,7 @@ void setup() {
   Serial.println("Sensors geinitialiseerd");
 
   for (int is=0;is<nswitch;is++) {
-     sc[is].on=1;
+     sc[is].on=false;
      int ilight = sc[is].no;
      Serial.print(light[ilight].name);
      Serial.print(" ");
@@ -390,7 +378,7 @@ void setup() {
      Serial.print(" - ");
      Serial.println(sc[is].whenOff);
   }
-
+  
   Serial.println("Init done");
 }
 
@@ -455,7 +443,7 @@ void loop(void) {
   /*******************************
    * Handle the scheduled switches
    **/
-  if (difftime(epoch,lastCheck)>sampleinterval*60) {
+  if (difftime(epoch,lastCheck)>switchinterval*60) {
     lastCheck = epoch;
     getLight();
     for (int is=0;is<nswitch;is++) {
@@ -540,7 +528,7 @@ int timetosec(String d) {
  * Get the air pressure and store it
  */
 float getPressure() {
-  // pressure = bmp.readPressure() / 100.0;
+  pressure = bmp.readPressure() / 100.0;
   Serial.print("{pressure:");
   Serial.print(pressure);
   Serial.println("}");
