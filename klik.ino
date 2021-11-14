@@ -20,6 +20,7 @@
  * 201902 Graph page debug
  * 202012 Schedule improved
  * 202109 Removed NTP stuff and replaced with standard time.h functions, supports summmer time switch too
+ * 202111 Debuged
  *
  * Todo:
  * - sensorthings protocol
@@ -92,6 +93,9 @@ boolean klik = true;
  **/
 void setup() {
 
+  Serial.begin(9600);
+  delay(10);
+
 #if WOLD
   dark = 0.3;
   /***********************
@@ -121,7 +125,7 @@ void setup() {
   light[0] = {1, 'J', "Schemerlamp"};
   light[1] = {2, 'J', "Keuken"};
   light[2] = {3, 'J', "Balkon"};
-  
+
   /**
    * Scheduling
    * number, time to switch on, time to switch off
@@ -132,14 +136,11 @@ void setup() {
   sc[2] = {2, timetosec("15:00:00"), timetosec("22:30:00"), false};
   sc[3] = {2, timetosec("04:45:00"), timetosec("09:15:00"), false};
 #endif
-  
+
   /**
    * Sensorthings stuff
    **/
   things[0] = {"Klik", "Klik meet in huis."};
-
-  Serial.begin(9600);
-  delay(10);
 
   // Red LED on during setup()
   led(0, "on");
@@ -149,7 +150,7 @@ void setup() {
   Serial.print(ssid);
   Serial.print(" as ");
   Serial.println(sitename);
-  
+
   WiFi.mode(WIFI_STA);
   WiFi.hostname(sitename);
   WiFi.begin(ssid, password);
@@ -194,7 +195,7 @@ void setup() {
       }
     }
     message += "</table></form>";
-    
+
     message += "<p>Sensors</p>";
     message += "<table>";
     message += tableHead("parameter", "value");
@@ -378,7 +379,7 @@ void setup() {
      Serial.print(" - ");
      Serial.println(sc[is].whenOff);
   }
-  
+
   Serial.println("Init done");
 }
 
@@ -655,25 +656,31 @@ String graph(int ns) {
   out += "<polyline style=\"fill:none;stroke:green;stroke-width:3\" points=\"";
   for (int i=0;i<nsamples;i++) {
     int is = (i+isample) % nsamples;
-    float x=width*i/nsamples;
-    float y=height*(1.0-(pressureTS[is]-pMin)/(pMax-pMin));
-    out += (String) x+","+(String) y+" ";
+    if (!isnan(pressureTS[is])) {
+      float x=width*i/nsamples;
+      float y=height*(1.0-(pressureTS[is]-pMin)/(pMax-pMin));
+      out += (String) x+","+(String) y+" ";
+    }
   }
   out += "\"/>\n";
   out += "<polyline style=\"fill:none;stroke:blue;stroke-width:3\" points=\"";
   for (int i=0;i<nsamples;i++) {
     int is = (i+isample) % nsamples;
-    float x=width*i/nsamples;
-    float y=height*(1.0-(humidityTS[is]-hMin)/(hMax-hMin));
-    out += (String) x+","+(String) y+" ";
+    if (!isnan(humidityTS[is])) {
+      float x=width*i/nsamples;
+      float y=height*(1.0-(humidityTS[is]-hMin)/(hMax-hMin));
+      out += (String) x+","+(String) y+" ";
+    }
   }
   out += "\"/>\n";
   out += "<polyline style=\"fill:none;stroke:red;stroke-width:3\" points=\"";
   for (int i=0;i<nsamples;i++) {
     int is = (i+isample) % nsamples;
-    float x=width*i/nsamples;
-    float y=height*(1.0-(temperatureTS[is]-tMin)/(tMax-tMin));
-    out += (String) x+","+(String) y+" ";
+    if (!isnan(temperatureTS[is])) {
+      float x=width*i/nsamples;
+      float y=height*(1.0-(temperatureTS[is]-tMin)/(tMax-tMin));
+      out += (String) x+","+(String) y+" ";
+    }
   }
   out += "\"/>\n";
   out += "</svg>";

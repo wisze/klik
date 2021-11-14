@@ -1,11 +1,11 @@
 
-#define WOLD true
+#define WOLD false
 
 /*********************
  * Configuration stuff
  */
 const int waitfor = 1000;      // wait for n cycles, used for delays between sensor readings etc.
-const int sampleinterval = 10; // sample every 5 minutes
+const int sampleinterval = 5;  // sample every 5 minutes
 // const char group = 'J';     // switch group
 const int maxswitch = 8;       // number of switches
 const int switchinterval = 3;  // switch every three minutes
