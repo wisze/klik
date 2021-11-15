@@ -1,4 +1,3 @@
-
 /**
  * Automatic switch
  */

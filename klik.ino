@@ -645,12 +645,18 @@ String graph(int ns) {
   float pMin=2000.0; float pMax=    0.0;
   float tMin=  50.0; float tMax=  -50.0;
   for (int i=0;i<nsamples;i++) {
+    if (!isnan(temperatureTS[i])) {
       tMin = min(temperatureTS[i],tMin);
       tMax = max(temperatureTS[i],tMax);
+    }
+    if (!isnan(humidityTS[i])) {
       hMin = min(humidityTS[i],hMin);
       hMax = max(humidityTS[i],hMax);
+    }
+    if (!isnan(pressureTS[i])) {
       pMin = min(pressureTS[i],pMin);
       pMax = max(pressureTS[i],pMax);
+    }
   }
   String out = "<svg height=\""+(String) height+"\" width=\""+(String) width+"\">\n";
   out += "<polyline style=\"fill:none;stroke:green;stroke-width:3\" points=\"";
