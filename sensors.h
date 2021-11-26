@@ -11,7 +11,7 @@ Datastream streams[nstreams];
 /**
  * Time series arrays
  */
-const int nsamples = 288;
+const int nsamples = 144;
 float temperatureTS[nsamples];
 float humidityTS[nsamples];
 float pressureTS[nsamples];
